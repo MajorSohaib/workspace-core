@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sohaib // Core</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+    
+    <style>
+        body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans antialiased min-h-screen flex flex-col md:flex-row">
+
+    <script>
+        const AlarmSoundEngine = {
+            playAlert() {
+                try {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
+                    gain.gain.setValueAtTime(0.5, ctx.currentTime);
+                    osc.connect(gain); gain.connect(ctx.destination);
+                    osc.start(); osc.stop(ctx.currentTime + 1.2);
+                } catch(e) { console.log("Audio standby."); }
+            }
+        };
+    </script>
+
+    <aside class="hidden md:flex flex-col w-64 bg-slate-900 text-white min-h-screen p-4 sticky top-0 shadow-lg">
+        <div class="mb-8 px-2 flex items-center gap-2">
+            <i class="ti ti-binary text-2xl text-indigo-400"></i>
+            <h1 class="text-xl font-bold tracking-tight">Sohaib <span class="text-indigo-400 font-black">// Core</span></h1>
+        </div>
+        <nav class="flex-1 space-y-1" id="desktop-nav-links"></nav>
+
+        <div class="mt-4 pt-4 border-t border-slate-800 px-2">
+    <a href="https://sheets.google.com" target="_blank" class="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 rounded-xl transition uppercase tracking-wider shadow-sm">
+        <i class="ti ti-spreadsheet text-emerald-500 text-sm"></i>
+        Open Master Sheet
+    </a>
+</div>
+
+        <div id="sync-status-indicator" class="pt-4 border-t border-slate-800 text-xs text-slate-400 px-2 flex items-center justify-between">
+            <span>Sync status: Local Only</span>
+            <i class="ti ti-cloud-off text-amber-500 text-sm"></i>
+        </div>
+    </aside>
+
+    <header class="md:hidden bg-slate-900 text-white p-4 flex items-center justify-between sticky top-0 z-50 shadow-md">
+        <div class="flex items-center gap-2">
+            <i class="ti ti-binary text-xl text-indigo-400"></i>
+            <h1 class="text-lg font-bold">Sohaib <span class="text-indigo-400 font-black">// Core</span></h1>
+        </div>
+        <div id="sync-status-indicator-mobile" class="flex items-center gap-1 bg-slate-800 px-2.5 py-1 rounded-lg text-xs font-bold text-amber-400">
+            <i class="ti ti-cloud-off text-sm"></i>
+            <span>Local</span>
+        </div>
+    </header>
+
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-950 border-t border-slate-800 flex justify-around items-center py-2 px-1 z-50 overflow-x-auto shadow-2xl" id="mobile-nav-links"></nav>
+
+    <main class="flex-1 p-4 md:p-8 pb-24 md:pb-8 overflow-y-auto">
+        <div id="doomscroll-alert-modal" class="hidden fixed inset-0 bg-rose-950/95 z-50 flex flex-col items-center justify-center p-6 text-center animate-fade-in select-none">
+            <div class="p-4 bg-rose-900/50 rounded-full border border-rose-500 text-rose-400 text-4xl mb-4 animate-bounce"><i class="ti ti-alert-octagon"></i></div>
+            <h2 class="text-white text-3xl font-black tracking-tight uppercase mb-2">Guard Intervention Alert</h2>
+            <p id="doomscroll-modal-message" class="text-rose-200 text-lg max-w-md font-medium mb-8"></p>
+            <button onclick="document.getElementById('doomscroll-alert-modal').classList.add('hidden')" class="bg-white hover:bg-slate-100 text-rose-950 font-black px-8 py-3 rounded-2xl text-sm">I Acknowledge.</button>
+        </div>
+
+        <div id="view-panels-container" class="max-w-6xl mx-auto"></div>
+    </main>
+
+    <script>
+        const AppState = {
+            activeView: 'dashboard',
+            activeChartTab: 'programming',
+            settings: { googleWebappUrl: '' },
+            modules: {
+                dashboard: {},
+                programming: [],       
+                content_creation: [],  
+                books: [],             
+                notes: [],             
+                workout: [],           
+                finance: [], 
+                alarms: [],
+                habits: []
+            },
+            focusSession: { timerId: null, remainingSeconds: 0, activeTopic: '', totalDurationMins: 0 },
+            utilityStopwatch: { timerId: null, elapsedSeconds: 0, isRunning: false }
+        };
+
+        const SystemModulesDefinition = {
+            dashboard: { label: 'Dashboard', icon: 'ti-smart-home', color: 'indigo' },
+            programming: { label: 'Programming', icon: 'ti-code-asterisk', color: 'violet' },
+            content_creation: { label: 'Content Creator', icon: 'ti-video', color: 'fuchsia' },
+            books: { label: 'Book Shelf', icon: 'ti-book-2', color: 'amber' },
+            notes: { label: 'Notes Vault', icon: 'ti-notebook', color: 'teal' }, 
+            workout: { label: 'Workouts', icon: 'ti-barbell', color: 'emerald' }, 
+            finance: { label: 'Finance Center', icon: 'ti-cash-banknote', color: 'rose' },
+            habits: { label: 'Habits Grid', icon: 'ti-calendar-repeat', color: 'cyan' },
+            utilities: { label: 'Time Center', icon: 'ti-clock', color: 'sky' }
+        };
+
+        let globalChartInstance = null;
+
+        const StorageController = {
+            STORAGE_KEY: 'DAILY_LIFE_TRACKER_DATA_SOHAIB_V5',
+
+            init() {
+                try {
+                    const localData = localStorage.getItem(this.STORAGE_KEY);
+                    if (localData) {
+                        const parsed = JSON.parse(localData);
+                        if (parsed.modules) {
+                            AppState.settings = parsed.settings || { googleWebappUrl: '' };
+                            Object.keys(AppState.modules).forEach(key => {
+                                if (parsed.modules[key]) AppState.modules[key] = parsed.modules[key];
+                            });
+                        }
+                    }
+                    this.saveToDisk();
+                } catch (error) { console.error("Database load collision:", error); }
+            },
+
+            saveToDisk() {
+                try {
+                    localStorage.setItem(this.STORAGE_KEY, JSON.stringify({ settings: AppState.settings, modules: AppState.modules }));
+                } catch (error) { console.error("Disk save failure:", error); }
+            },
+
+            async syncToCloud() {
+                const url = AppState.settings.googleWebappUrl;
+                if (!url) return;
+                const indicator = document.getElementById('sync-status-indicator');
+                const indicatorMob = document.getElementById('sync-status-indicator-mobile');
+                
+                try {
+                    if (indicator) indicator.innerHTML = `<span>Syncing Cloud...</span><i class="ti ti-refresh text-indigo-400 animate-spin"></i>`;
+                    if (indicatorMob) indicatorMob.innerHTML = `<span>Syncing...</span><i class="ti ti-refresh text-indigo-400 animate-spin text-sm"></i>`;
+                    
+                    const dataPackage = [];
+                    Object.keys(AppState.modules).forEach(modKey => {
+                        if (Array.isArray(AppState.modules[modKey])) {
+                            AppState.modules[modKey].forEach(item => {
+                                dataPackage.push({ timestamp: item.id || Date.now(), module: modKey, payload: item });
+                            });
+                        }
+                    });
+
+                    await fetch(url, {
+                        method: 'POST',
+                        mode: 'no-cors', 
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ entries: dataPackage })
+                    });
+
+                    if (indicator) indicator.innerHTML = `<span>Cloud Synced</span><i class="ti ti-cloud-check text-green-400 text-sm"></i>`;
+                    if (indicatorMob) {
+                        indicatorMob.className = "flex items-center gap-1 bg-emerald-950 border border-emerald-500/30 text-emerald-400 px-2.5 py-1 rounded-lg text-xs font-bold";
+                        indicatorMob.innerHTML = `<i class="ti ti-cloud-check text-sm"></i> <span>Live Sync</span>`;
+                    }
+                } catch (err) {
+                    if (indicator) indicator.innerHTML = `<span>Cloud Synced</span><i class="ti ti-cloud-check text-green-400 text-sm"></i>`;
+                }
+            }
+        };
+
+        const GraphEngine = {
+            renderDashboardCharts() {
+                const ctx = document.getElementById('dashboardGlobalCanvas');
+                if (!ctx) return;
+                if (globalChartInstance) globalChartInstance.destroy();
+
+                const currentTab = AppState.activeChartTab;
+                let chartType = 'bar'; let chartData = { labels: [], datasets: [] };
+                let chartOptions = { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { position: 'bottom' } } };
+
+                if (currentTab === 'programming') {
+                    const topicMap = {};
+                    AppState.modules.programming.forEach(l => topicMap[l.topic] = (topicMap[l.topic] || 0) + l.duration);
+                    chartType = 'doughnut';
+                    chartData = {
+                        labels: Object.keys(topicMap).length ? Object.keys(topicMap) : ['No Data Studied'],
+                        datasets: [{ data: Object.keys(topicMap).length ? Object.values(topicMap) : [1], backgroundColor: ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b'] }]
+                    };
+                } else if (currentTab === 'content') {
+                    let done = 0; let pending = 0;
+                    AppState.modules.content_creation.forEach(l => l.status === 'Done' ? done++ : pending++);
+                    chartType = 'bar';
+                    chartData = { labels: ['Done', 'Pending'], datasets: [{ label: 'Videos Production', data: [done, pending], backgroundColor: ['#10b981', '#f59e0b'] }] };
+                } else if (currentTab === 'workout') {
+                    const exMap = {};
+                    AppState.modules.workout.forEach(l => exMap[l.exercise] = (exMap[l.exercise] || 0) + (l.sets * l.reps));
+                    chartType = 'bar';
+                    chartData = { labels: Object.keys(exMap), datasets: [{ label: 'Repetition Volume', data: Object.values(exMap), backgroundColor: ['#10b981', '#34d399'] }] };
+                } else if (currentTab === 'finance') {
+                    let inc = 0; let exp = 0;
+                    AppState.modules.finance.forEach(l => l.flow === 'Income' ? inc += l.amount : exp += l.amount);
+                    chartType = 'pie';
+                    chartData = { labels: ['Income Cash Flow', 'Expenses Volume'], datasets: [{ data: [inc, exp], backgroundColor: ['#10b981', '#f43f5e'] }] };
+                }
+
+                globalChartInstance = new Chart(ctx, { type: chartType, data: chartData, options: chartOptions });
+            },
+            switchChartTab(tabId) {
+                AppState.activeChartTab = tabId;
+                document.querySelectorAll('.chart-tab-btn').forEach(btn => {
+                    btn.className = btn.dataset.tabId === tabId ? "chart-tab-btn px-3 py-2 border-b-2 border-indigo-600 text-indigo-600 font-bold transition focus:outline-none" : "chart-tab-btn px-3 py-2 border-b-2 border-transparent text-slate-500 transition focus:outline-none";
+                });
+                this.renderDashboardCharts();
+            }
+        };
+
+        const UIController = {
+            init() { this.renderNavigation(); this.generateViewShells(); this.switchView(AppState.activeView); this.startGlobalClockEngine(); },
+
+            renderNavigation() {
+                const desktopNav = document.getElementById('desktop-nav-links');
+                const mobileNav = document.getElementById('mobile-nav-links');
+                desktopNav.innerHTML = ''; mobileNav.innerHTML = '';
+                Object.keys(SystemModulesDefinition).forEach(key => {
+                    const mod = SystemModulesDefinition[key];
+                    const dBtn = document.createElement('button');
+                    dBtn.className = `nav-btn-desktop w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition mb-1 text-slate-300 hover:bg-slate-800 hover:text-white`;
+                    dBtn.dataset.viewId = key; dBtn.innerHTML = `<i class="ti ${mod.icon} text-lg"></i> <span>${mod.label}</span>`;
+                    dBtn.addEventListener('click', () => this.switchView(key)); desktopNav.appendChild(dBtn);
+
+                    const mBtn = document.createElement('button');
+                    mBtn.className = `nav-btn-mobile flex flex-col items-center justify-center flex-1 min-w-[56px] py-1 text-slate-400 text-xs gap-0.5`;
+                    mBtn.dataset.viewId = key; mBtn.innerHTML = `<i class="ti ${mod.icon} text-lg"></i><span class="text-[9px] tracking-tight">${mod.label}</span>`;
+                    mBtn.addEventListener('click', () => this.switchView(key)); mobileNav.appendChild(mBtn);
+                });
+            },
+
+            generateViewShells() {
+                const viewsContainer = document.getElementById('view-panels-container');
+                viewsContainer.innerHTML = '';
+                Object.keys(SystemModulesDefinition).forEach(key => {
+                    const mod = SystemModulesDefinition[key]; const panel = document.createElement('section');
+                    panel.id = `view-panel-${key}`; panel.className = 'hidden space-y-6 animate-fade-in';
+                    
+                    if (key === 'dashboard') {
+                        panel.innerHTML = `
+                            <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm">
+                                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-100 pb-4 mb-6">
+                                    <div><h2 class="text-xl font-bold text-slate-800">Core Engine Analytics</h2><p class="text-xs text-slate-500">Real-time lifestyle parameter streams.</p></div>
+                                    <div class="flex border-b border-slate-200 text-xs sm:text-sm font-medium overflow-x-auto whitespace-nowrap">
+                                        <button onclick="GraphEngine.switchChartTab('programming')" data-tab-id="programming" class="chart-tab-btn px-3 py-2 border-b-2 border-indigo-600 text-indigo-600 font-bold focus:outline-none">Programming</button>
+                                        <button onclick="GraphEngine.switchChartTab('content')" data-tab-id="content" class="chart-tab-btn px-3 py-2 border-b-2 border-transparent text-slate-500 focus:outline-none">Content</button>
+                                        <button onclick="GraphEngine.switchChartTab('workout')" data-tab-id="workout" class="chart-tab-btn px-3 py-2 border-b-2 border-transparent text-slate-500 focus:outline-none">Workouts</button>
+                                        <button onclick="GraphEngine.switchChartTab('finance')" data-tab-id="finance" class="chart-tab-btn px-3 py-2 border-b-2 border-transparent text-slate-500 focus:outline-none">Finance Balance</button>
+                                    </div>
+                                </div>
+                                <div class="relative w-full h-80 sm:h-96"><canvas id="dashboardGlobalCanvas"></canvas></div>
+                            </div>
+                            <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                <div class="flex-1">
+                                    <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-2"><i class="ti ti-cloud-computing text-indigo-600"></i> Cloud Auto-Sync Engine Registry</h3>
+                                    <input type="password" id="webapp-url-input" placeholder="Paste deployment Web App URL link..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono mb-2">
+                                    <button onclick="UIController.saveWebappUrlSettings()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-4 rounded-xl transition uppercase">Lock Sync Connection</button>
+                                </div>
+                                <div class="border-t sm:border-t-0 sm:border-l border-slate-200 pt-4 sm:pt-0 sm:pl-6">
+                                    <h4 class="text-xs font-bold text-slate-700 uppercase mb-2">Cache Clear Actions</h4>
+                                    <button onclick="UIController.purgeLocalCacheSuite()" class="bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 text-xs font-bold py-2 px-4 rounded-xl transition">Wipe Local Test Entries</button>
+                                </div>
+                            </div>
+                        `;
+                    } else if (key === 'programming') {
+                        panel.innerHTML = `
+                            <div id="focus-overlay" class="hidden fixed inset-0 bg-slate-950 z-50 flex flex-col items-center justify-center p-6 text-center animate-fade-in select-none">
+                                <button onclick="UIController.cancelFocusSession()" class="absolute top-6 right-6 text-slate-600 hover:text-slate-400 p-2 text-2xl"><i class="ti ti-x"></i></button>
+                                <span class="px-4 py-1.5 bg-slate-900 border border-slate-800 text-violet-400 font-semibold text-xs rounded-full uppercase tracking-widest mb-4" id="focus-overlay-topic">Python Session</span>
+                                <div id="focus-clock-display" class="text-white text-7xl sm:text-8xl md:text-9xl font-black font-sans my-4">00:00</div>
+                                <p class="text-slate-500 text-xs max-w-xs mt-2 opacity-70">Double-tap background panel to exit early safely.</p>
+                            </div>
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-1">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ti ti-device-gamepad-2 text-violet-600"></i> Start Focus Clock</h3>
+                                    <form id="form-programming" class="space-y-4">
+                                        <div>
+                                            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Topic</label>
+                                            <select id="prog-topic" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none">
+                                                <option value="Python">Python Engine</option><option value="Data Structures">Data Structures (DSA)</option><option value="Machine Learning">Machine Learning</option><option value="SQL Database">SQL Database (MySQL)</option><option value="Web Dev">Web Dev Frameworks</option><option value="Cybersecurity">Cybersecurity / SIEM</option>
+                                            </select>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Target Mins</label><input type="number" id="prog-duration" value="45" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"></div>
+                                            <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Problems Solved</label><input type="number" id="prog-problems" value="0" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"></div>
+                                        </div>
+                                        <button type="submit" class="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2"><i class="ti ti-player-play"></i> Ignite Desk Focus Clock</button>
+                                    </form>
+                                </div>
+                                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-2 flex flex-col min-h-[400px]">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ti ti-history text-slate-500"></i> Technical Study Registry History</h3>
+                                    <div class="flex-1 overflow-x-auto"><table class="w-full text-left border-collapse"><thead><tr class="border-b text-slate-400 text-xs font-bold bg-slate-50/75"><th class="py-3 px-4">Topic</th><th class="py-3 px-4">Duration</th><th class="py-3 px-4">Problems</th><th class="py-3 px-4">Action</th></tr></thead><tbody id="table-body-programming" class="text-sm divide-y"></tbody></table></div>
+                                </div>
+                            </div>
+                        `;
+                    } else if (key === 'content_creation') {
+                        panel.innerHTML = `
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-1">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ti ti-movie text-fuchsia-600"></i> Production Pipeline Log</h3>
+                                    <form id="form-content" class="space-y-4">
+                                        <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Project Video Title</label><input type="text" id="content-title" placeholder="e.g., DSA Day in Life Vlog" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none" required></div>
+                                        <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Platform</label><select id="content-platform" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"><option value="Instagram">Instagram</option><option value="LinkedIn">LinkedIn</option><option value="TikTok">TikTok</option><option value="YouTube">YouTube</option></select></div>
+                                        <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Phase</label><select id="content-phase" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"><option value="Scripting">Scripting</option><option value="Voice Recording">Voice Recording</option><option value="Video Shooting">Video Shooting</option><option value="Editing">Video Editing</option><option value="Thumbnail">Thumbnail Design</option><option value="Published">Published</option></select></div>
+                                        <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Pipeline Status</label><div class="grid grid-cols-2 gap-3"><label class="flex items-center justify-center py-2 border rounded-xl text-xs cursor-pointer bg-slate-50 has-[:checked]:bg-emerald-50"><input type="radio" name="content-status" value="Pending" class="hidden" checked> Pending</label><label class="flex items-center justify-center py-2 border rounded-xl text-xs cursor-pointer bg-slate-50 has-[:checked]:bg-emerald-50"><input type="radio" name="content-status" value="Done" class="hidden"> Done</label></div></div>
+                                        <button type="submit" class="w-full bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2"><i class="ti ti-folder-plus"></i> Append Strategy State</button>
+                                    </form>
+                                </div>
+                                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-2 flex flex-col min-h-[400px]">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ti ti-brand-youtube text-slate-500"></i> Video Operations Registry</h3>
+                                    <div class="flex-1 overflow-x-auto"><table class="w-full text-left border-collapse"><thead><tr class="border-b text-slate-400 text-xs font-bold bg-slate-50/75"><th class="py-3 px-4">Project</th><th class="py-3 px-4">Platform</th><th class="py-3 px-4">Phase</th><th class="py-3 px-4">Status</th><th class="py-3 px-4">Action</th></tr></thead><tbody id="table-body-content" class="text-sm divide-y"></tbody></table></div>
+                                </div>
+                            </div>
+                        `;
+                    } else if (key === 'books') {
+                        panel.innerHTML = `
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                                <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex items-center gap-3">
+                                    <div class="p-3 bg-amber-50 text-amber-600 rounded-xl text-xl"><i class="ti ti-books"></i></div>
+                                    <div><span class="text-[10px] uppercase font-bold text-slate-400">Books Active</span><h4 id="book-count-card" class="text-lg font-black text-slate-800">0</h4></div>
+                                </div>
+                                <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex items-center gap-3">
+                                    <div class="p-3 bg-indigo-50 text-indigo-600 rounded-xl text-xl"><i class="ti ti-page-break"></i></div>
+                                    <div><span class="text-[10px] uppercase font-bold text-slate-400">Total Pages Tracked</span><h4 id="book-pages-card" class="text-lg font-black text-slate-800">0</h4></div>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-1">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ti ti-bookmark text-amber-600"></i> Log Reading Session</h3>
+                                    <form id="form-books" class="space-y-4">
+                                        <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Book Title</label><input type="text" id="book-title" placeholder="e.g., 48 Laws of Power" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none" required></div>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Pages Read</label><input type="number" id="book-pages" min="1" placeholder="25" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none" required></div>
+                                            <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Total Pages</label><input type="number" id="book-total" min="1" placeholder="350" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none" required></div>
+                                        </div>
+                                        <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Insights Blueprint Summary</label><textarea id="book-notes" rows="3" placeholder="Key takeaways..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"></textarea></div>
+                                        <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2"><i class="ti ti-notebook"></i> Log Reading Entry</button>
+                                    </form>
+                                </div>
+                                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-2 flex flex-col min-h-[400px]">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ti ti-books text-slate-500"></i> Active Reading Ledger</h3>
+                                    <div class="flex-1 overflow-x-auto"><table class="w-full text-left border-collapse"><thead><tr class="border-b text-slate-400 text-xs font-bold bg-slate-50/75"><th class="py-3 px-4">Book</th><th class="py-3 px-4">Volume Progress</th><th class="py-3 px-4">Insights Snippet</th><th class="py-3 px-4">Action</th></tr></thead><tbody id="table-body-books" class="text-sm divide-y"></tbody></table></div>
+                                </div>
+                            </div>
+                        `;
+                    } else if (key === 'notes') {
+                        panel.innerHTML = `
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-1">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ti ti-pencil text-teal-600"></i> Capture Thought / Idea</h3>
+                                    <form id="form-notes" class="space-y-4">
+                                        <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Subject Header / Title</label><input type="text" id="note-title" placeholder="e.g., Mindset Shift" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none" required></div>
+                                        <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Category</label><select id="note-category" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"><option value="Personal Brand">Personal Brand Strategy</option><option value="Software Engineering">Software Engineering Studies</option><option value="Mindset & Power">Mindset & Core Philosophy</option><option value="General Reminders">General Reminders</option></select></div>
+                                        <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Detailed Content</label><textarea id="note-content" rows="4" placeholder="Reflections..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none" required></textarea></div>
+                                        <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2"><i class="ti ti-file-text"></i> Save Personal Note</button>
+                                    </form>
+                                </div>
+                                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-2 flex flex-col min-h-[400px]">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ti ti-notes text-slate-500"></i> Secure Personal Note Vault</h3>
+                                    <div id="notes-grid-layout" class="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto flex-1 max-h-[500px]"></div>
+                                </div>
+                            </div>
+                        `;
+                    } else if (key === 'workout') {
+                        panel.innerHTML = `
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-1">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ti ti-barbell text-emerald-600"></i> Log Home Set</h3>
+                                    <form id="form-workout" class="space-y-4">
+                                        <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Exercise Element</label><select id="work-exercise" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"><option value="Pushups">Push-ups Base</option><option value="Planks">Plank Core (Seconds)</option><option value="Pullups">Pull-ups Apex</option><option value="Sprints">Sprint Intervals</option><option value="Jumping Jacks">Jumping Jacks Volume</option></select></div>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Sets</label><input type="number" id="work-sets" value="3" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"></div>
+                                            <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Reps/Secs</label><input type="number" id="work-reps" value="12" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"></div>
+                                        </div>
+                                        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2"><i class="ti ti-plus"></i> Save Set</button>
+                                    </form>
+                                </div>
+                                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-2 flex flex-col min-h-[400px]">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ti ti-activity text-slate-500"></i> Calisthenics Volume Log</h3>
+                                    <div class="flex-1 overflow-x-auto"><table class="w-full text-left border-collapse"><thead><tr class="border-b text-slate-400 text-xs font-bold bg-slate-50/75"><th class="py-3 px-4">Exercise</th><th class="py-3 px-4">Metrics</th><th class="py-3 px-4">Total Output Volume</th><th class="py-3 px-4">Action</th></tr></thead><tbody id="table-body-workout" class="text-sm divide-y"></tbody></table></div>
+                                </div>
+                            </div>
+                        `;
+                    } else if (key === 'finance') {
+                        panel.innerHTML = `
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                                <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex items-center gap-3">
+                                    <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl text-xl"><i class="ti ti-trending-up"></i></div>
+                                    <div><span class="text-[10px] uppercase font-bold text-slate-400">Total Inflow</span><h4 id="fin-inc-board" class="text-lg font-black text-slate-800">Rs. 0</h4></div>
+                                </div>
+                                <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex items-center gap-3">
+                                    <div class="p-3 bg-rose-50 text-rose-600 rounded-xl text-xl"><i class="ti ti-trending-down"></i></div>
+                                    <div><span class="text-[10px] uppercase font-bold text-slate-400">Total Outflow</span><h4 id="fin-exp-board" class="text-lg font-black text-slate-800">Rs. 0</h4></div>
+                                </div>
+                                <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex items-center gap-3">
+                                    <div id="fin-bal-icon-box" class="p-3 bg-indigo-50 text-indigo-600 rounded-xl text-xl"><i class="ti ti-wallet"></i></div>
+                                    <div><span class="text-[10px] uppercase font-bold text-slate-400">Net Balance</span><h4 id="fin-bal-board" class="text-lg font-black text-slate-800">Rs. 0</h4></div>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-1">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ti ti-arrows-exchange text-rose-600"></i> Post Transaction</h3>
+                                    <form id="form-finance" class="space-y-4">
+                                        <div>
+                                            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Flow Directive Mode</label>
+                                            <div class="grid grid-cols-2 gap-2">
+                                                <button type="button" id="toggle-fin-exp" onclick="UIController.toggleFinanceFlowMode('Expense')" class="py-2 text-xs font-bold rounded-xl border border-rose-500 bg-rose-50 text-rose-700">Expense Out</button>
+                                                <button type="button" id="toggle-fin-inc" onclick="UIController.toggleFinanceFlowMode('Income')" class="py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-600">Income In</button>
+                                            </div>
+                                        </div>
+                                        <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Value Amount (PKR)</label><input type="number" id="fin-amount" placeholder="Amount in PKR" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none" required></div>
+                                        <div>
+                                            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Classification Category</label>
+                                            <select id="fin-category" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none" required></select>
+                                        </div>
+                                        <div id="custom-category-input-wrapper" class="hidden mt-3 animate-fade-in">
+                                            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Custom Revenue Source Title</label>
+                                            <input type="text" id="fin-custom-category" placeholder="e.g., Sweatshirt Pre-orders" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                        </div>
+                                        <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl text-sm uppercase tracking-wider shadow-sm">Commit Ledger Line</button>
+                                    </form>
+                                </div>
+                                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-2 flex flex-col min-h-[400px]">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ti ti-receipt text-slate-500"></i> Unified Account Ledger Statement</h3>
+                                    <div class="flex-1 overflow-x-auto"><table class="w-full text-left border-collapse"><thead><tr class="border-b text-slate-400 text-xs font-bold bg-slate-50/75"><th class="py-3 px-4">Amount</th><th class="py-3 px-4">Category</th><th class="py-3 px-4">Flow Directive</th><th class="py-3 px-4">Date</th><th class="py-3 px-4">Action</th></tr></thead><tbody id="table-body-finance" class="text-sm divide-y"></tbody></table></div>
+                                </div>
+                            </div>
+                        `;
+                    } else if (key === 'habits') {
+                        panel.innerHTML = `
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-1">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ti ti-circle-plus text-cyan-600"></i> Initialize Core Habit</h3>
+                                    <form id="form-habits" class="space-y-4">
+                                        <div><label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Habit Discipline Name</label><input type="text" id="habit-name" placeholder="e.g., German Language Review" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none" required></div>
+                                        <button type="submit" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-xl text-sm uppercase tracking-wider">Deploy Habit Vector</button>
+                                    </form>
+                                </div>
+                                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-2 flex flex-col">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><i class="ti ti-grid-dots text-slate-500"></i> Strategic 7-Day Discipline Stream Matrix</h3>
+                                    <p class="text-xs text-slate-400 mb-4">Tap on any day bubble checkbox container to switch completion streaks parameters live.</p>
+                                    <div id="habits-matrix-board-container" class="space-y-4 flex-1 overflow-y-auto max-h-[500px]"></div>
+                                </div>
+                            </div>
+                        `;
+                    } else if (key === 'utilities') {
+                        panel.innerHTML = `
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+                                <div class="bg-slate-950 text-white rounded-3xl p-8 flex flex-col items-center justify-center text-center shadow-xl border border-slate-800 relative overflow-hidden">
+                                    <div class="absolute inset-0 bg-gradient-to-br from-sky-500/10 to-transparent pointer-events-none"></div>
+                                    <span class="text-xs tracking-widest uppercase text-sky-400 font-bold mb-2" id="widget-date-day">TODAY</span>
+                                    <h2 id="widget-clock" class="text-6xl font-black tracking-tighter text-white drop-shadow-md select-none font-sans" style="font-feature-settings: 'tnum';">00:00:00</h2>
+                                    <span id="widget-date" class="text-sm text-slate-400 mt-2 font-medium tracking-wide">May 30, 2026</span>
+                                </div>
+                                <div class="bg-white rounded-3xl border border-slate-200 p-8 flex flex-col items-center justify-center text-center shadow-sm">
+                                    <span class="text-xs font-bold tracking-widest uppercase text-slate-400 mb-2">Utility Timer</span>
+                                    <div id="utility-stopwatch-display" class="text-5xl font-black tracking-tight text-slate-900 my-2 select-none font-mono">00:00.0</div>
+                                    <div class="flex items-center gap-3 mt-6 w-full max-w-xs">
+                                        <button id="btn-utility-stop" onclick="UIController.toggleUtilityStopwatch()" class="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition">Start</button>
+                                        <button onclick="UIController.resetUtilityStopwatch()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition">Reset</button>
+                                    </div>
+                                </div>
+                                <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm md:col-span-2">
+                                    <h3 class="text-md font-bold text-slate-800 mb-3 flex items-center gap-2"><i class="ti ti-shield-alert text-rose-600"></i> Active Doomscroll Guard Registry</h3>
+                                    <form id="form-alarms" class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end mb-6">
+                                        <div><label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Trigger Time</label><input type="time" id="alarm-time" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none" required></div>
+                                        <div><label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Core Mission Message</label><input type="text" id="alarm-msg" placeholder="Close TikTok!" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none" required></div>
+                                        <button type="submit" class="bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 px-4 rounded-xl text-xs uppercase tracking-wider transition h-10 flex items-center justify-center gap-1"><i class="ti ti-bell-plus"></i> Arm Guard</button>
+                                    </form>
+                                    <div id="alarms-list-container" class="space-y-2"></div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    viewsContainer.appendChild(panel);
+                });
+                this.currentFinanceFlow = 'Expense'; this.updateFinanceCategoryOptions();
+                this.bindFormEventListeners(); this.renderModuleTables();
+            },
+
+            toggleFinanceFlowMode(mode) {
+                this.currentFinanceFlow = mode;
+                const btnExp = document.getElementById('toggle-fin-exp');
+                const btnInc = document.getElementById('toggle-fin-inc');
+                if (mode === 'Expense') {
+                    btnExp.className = "py-2 text-xs font-bold rounded-xl border border-rose-500 bg-rose-50 text-rose-700";
+                    btnInc.className = "py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-600";
+                } else {
+                    btnInc.className = "py-2 text-xs font-bold rounded-xl border border-emerald-500 bg-emerald-50 text-emerald-700";
+                    btnExp.className = "py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-600";
+                }
+                this.updateFinanceCategoryOptions();
+            },
+
+            updateFinanceCategoryOptions() {
+                const select = document.getElementById('fin-category'); if (!select) return;
+                select.innerHTML = '';
+                const options = (this.currentFinanceFlow === 'Expense') ? 
+                    ['Food', 'Transport', 'Education', 'Shopping', 'Entertainment'] : 
+                    ['Seen Sheen Venture', 'Freelancing Analytics', 'Monthly Allowance', 'Investments', 'Custom Revenue Stream...'];
+                options.forEach(opt => { select.innerHTML += `<option value="${opt}">${opt}</option>`; });
+                const customWrapper = document.getElementById('custom-category-input-wrapper');
+                if (customWrapper) customWrapper.classList.add('hidden'); 
+                select.onchange = () => {
+                    if (select.value === 'Custom Revenue Stream...') customWrapper.classList.remove('hidden');
+                    else customWrapper.classList.add('hidden');
+                };
+            },
+
+            bindFormEventListeners() {
+                const formProg = document.getElementById('form-programming');
+                if (formProg) {
+                    formProg.addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        const targetMins = parseInt(document.getElementById('prog-duration').value);
+                        AppState.focusSession.activeTopic = document.getElementById('prog-topic').value;
+                        AppState.focusSession.totalDurationMins = targetMins;
+                        AppState.focusSession.remainingSeconds = targetMins * 60;
+                        AppState.focusSession.cachedProblems = parseInt(document.getElementById('prog-problems').value);
+                        AppState.focusSession.cachedPlatform = "LeetCode"; AppState.focusSession.cachedDifficulty = "Medium"; AppState.focusSession.cachedNotes = "";
+                        this.startFocusCountdown();
+                    });
+                }
+
+                const formContent = document.getElementById('form-content');
+                if (formContent) {
+                    formContent.addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        const entry = {
+                            id: Date.now(), title: document.getElementById('content-title').value,
+                            platform: document.getElementById('content-platform').value, phase: document.getElementById('content-phase').value,
+                            status: document.querySelector('input[name="content-status"]:checked').value
+                        };
+                        AppState.modules.content_creation.unshift(entry);
+                        StorageController.saveToDisk(); this.renderModuleTables();
+                        if(AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
+                        StorageController.syncToCloud(); formContent.reset();
+                    });
+                }
+
+                const formBooks = document.getElementById('form-books');
+                if (formBooks) {
+                    formBooks.addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        const entry = {
+                            id: Date.now(), date: new Date().toLocaleDateString(), title: document.getElementById('book-title').value,
+                            pages: parseInt(document.getElementById('book-pages').value), total: parseInt(document.getElementById('book-total').value),
+                            notes: document.getElementById('book-notes').value
+                        };
+                        AppState.modules.books.unshift(entry);
+                        StorageController.saveToDisk(); this.renderModuleTables();
+                        StorageController.syncToCloud(); formBooks.reset();
+                    });
+                }
+
+                const formNotes = document.getElementById('form-notes');
+                if (formNotes) {
+                    formNotes.addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        const entry = {
+                            id: Date.now(), date: new Date().toLocaleDateString(), title: document.getElementById('note-title').value,
+                            category: document.getElementById('note-category').value, content: document.getElementById('note-content').value
+                        };
+                        AppState.modules.notes.unshift(entry);
+                        StorageController.saveToDisk(); this.renderModuleTables();
+                        StorageController.syncToCloud(); formNotes.reset();
+                    });
+                }
+
+                const formWork = document.getElementById('form-workout');
+                if (formWork) {
+                    formWork.addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        const entry = {
+                            id: Date.now(), exercise: document.getElementById('work-exercise').value,
+                            sets: parseInt(document.getElementById('work-sets').value), reps: parseInt(document.getElementById('work-reps').value)
+                        };
+                        AppState.modules.workout.unshift(entry);
+                        StorageController.saveToDisk(); this.renderModuleTables();
+                        if(AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
+                        StorageController.syncToCloud(); formWork.reset();
+                    });
+                }
+
+                const formFin = document.getElementById('form-finance');
+                if (formFin) {
+                    formFin.addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        let finalizedCategory = document.getElementById('fin-category').value;
+                        const customInput = document.getElementById('fin-custom-category');
+                        if (finalizedCategory === 'Custom Revenue Stream...') finalizedCategory = customInput.value.trim() || 'Other Income';
+
+                        const entry = {
+                            id: Date.now(), date: new Date().toLocaleDateString(), amount: parseFloat(document.getElementById('fin-amount').value),
+                            category: finalizedCategory, flow: this.currentFinanceFlow 
+                        };
+                        AppState.modules.finance.unshift(entry);
+                        StorageController.saveToDisk(); this.renderModuleTables();
+                        if(AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
+                        StorageController.syncToCloud(); 
+                        if (customInput) customInput.value = '';
+                        document.getElementById('custom-category-input-wrapper').classList.add('hidden'); formFin.reset();
+                    });
+                }
+
+                const formHabit = document.getElementById('form-habits');
+                if (formHabit) {
+                    formHabit.addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        const entry = { id: Date.now(), name: document.getElementById('habit-name').value.trim(), history: {} };
+                        AppState.modules.habits.unshift(entry);
+                        StorageController.saveToDisk(); this.renderModuleTables();
+                        StorageController.syncToCloud(); formHabit.reset();
+                    });
+                }
+            },
+
+            saveWebappUrlSettings() {
+                const url = document.getElementById('webapp-url-input').value.trim();
+                if (url) {
+                    AppState.settings.googleWebappUrl = url; StorageController.saveToDisk();
+                    alert("Database sync engine link successfully secured!"); StorageController.syncToCloud();
+                }
+            },
+
+            purgeLocalCacheSuite() {
+                if (confirm("Are you sure you want to clean out local state data? This will clear test metrics placeholders cleanly.")) {
+                    AppState.modules.programming = []; AppState.modules.content_creation = [];
+                    AppState.modules.books = []; AppState.modules.notes = [];
+                    AppState.modules.workout = []; AppState.modules.finance = []; AppState.modules.habits = [];
+                    StorageController.saveToDisk(); this.renderModuleTables();
+                    if(AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
+                    StorageController.syncToCloud();
+                }
+            },
+
+            startFocusCountdown() {
+                const overlay = document.getElementById('focus-overlay');
+                const topicLabel = document.getElementById('focus-overlay-topic');
+                topicLabel.innerText = `${AppState.focusSession.activeTopic} Session`;
+                overlay.classList.remove('hidden'); this.updateFocusClockDisplay();
+
+                clearInterval(AppState.focusSession.timerId);
+                AppState.focusSession.timerId = setInterval(() => {
+                    AppState.focusSession.remainingSeconds--; this.updateFocusClockDisplay();
+                    if (AppState.focusSession.remainingSeconds <= 0) {
+                        clearInterval(AppState.focusSession.timerId); this.completeFocusSession();
+                    }
+                }, 1000);
+
+                overlay.onclick = null; let lastTap = 0;
+                overlay.onclick = (e) => {
+                    if (e.target.closest('button')) return;
+                    const currentTime = new Date().getTime(); const tapLength = currentTime - lastTap;
+                    if (tapLength < 300 && tapLength > 0) this.cancelFocusSession();
+                    lastTap = currentTime;
+                };
+            },
+
+            updateFocusClockDisplay() {
+                const display = document.getElementById('focus-clock-display'); if (!display) return;
+                const mins = Math.floor(AppState.focusSession.remainingSeconds / 60); const secs = AppState.focusSession.remainingSeconds % 60;
+                display.innerText = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            },
+
+            completeFocusSession() {
+                const entry = {
+                    id: Date.now(), date: new Date().toLocaleDateString(), topic: AppState.focusSession.activeTopic,
+                    duration: AppState.focusSession.totalDurationMins, problems: AppState.focusSession.cachedProblems,
+                    platform: AppState.focusSession.cachedPlatform, difficulty: AppState.focusSession.cachedDifficulty, notes: AppState.focusSession.cachedNotes
+                };
+                AppState.modules.programming.unshift(entry);
+                StorageController.saveToDisk(); document.getElementById('focus-overlay').classList.add('hidden');
+                this.renderModuleTables(); if(AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
+                StorageController.syncToCloud(); alert(`Focus blocks verified & saved!`);
+            },
+
+            cancelFocusSession() {
+                if (confirm("End focus session? Data will be lost.")) {
+                    clearInterval(AppState.focusSession.timerId); document.getElementById('focus-overlay').classList.add('hidden');
+                }
+            },
+
+            startGlobalClockEngine() {
+                setInterval(() => {
+                    const clock = document.getElementById('widget-clock'); const dateEl = document.getElementById('widget-date');
+                    const dayEl = document.getElementById('widget-date-day'); const now = new Date();
+                    if (clock) {
+                        clock.innerText = now.toTimeString().split(' ')[0];
+                        if(dateEl) dateEl.innerText = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                        if(dayEl) dayEl.innerText = now.toLocaleDateString('en-US', { weekday: 'long' });
+                    }
+                }, 1000);
+            },
+
+            switchView(viewId) {
+                if (!SystemModulesDefinition[viewId]) return; AppState.activeView = viewId;
+                Object.keys(SystemModulesDefinition).forEach(key => {
+                    const panel = document.getElementById(`view-panel-${key}`);
+                    if (panel) key === viewId ? panel.classList.remove('hidden') : panel.className = 'hidden space-y-6';
+                });
+                document.querySelectorAll('.nav-btn-desktop').forEach(btn => {
+                    btn.dataset.viewId === viewId ? btn.classList.add('bg-indigo-600', 'text-white') : btn.classList.remove('bg-indigo-600', 'text-white');
+                });
+                if (viewId === 'dashboard') {
+                    GraphEngine.renderDashboardCharts();
+                    setTimeout(() => { const inputField = document.getElementById('webapp-url-input'); if (inputField) inputField.value = AppState.settings.googleWebappUrl; }, 50);
+                }
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            },
+
+            toggleContentStatus(id) {
+                const item = AppState.modules.content_creation.find(c => c.id === id);
+                if (item) {
+                    item.status = (item.status === 'Done') ? 'Pending' : 'Done';
+                    StorageController.saveToDisk(); this.renderModuleTables();
+                    if(AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
+                    StorageController.syncToCloud();
+                }
+            },
+
+            toggleHabitMatrixDay(habitId, dayOffsetStr) {
+                const habit = AppState.modules.habits.find(h => h.id === habitId);
+                if (habit) {
+                    if (!habit.history) habit.history = {};
+                    habit.history[dayOffsetStr] = !habit.history[dayOffsetStr];
+                    StorageController.saveToDisk(); this.renderModuleTables();
+                    StorageController.syncToCloud();
+                }
+            },
+
+            renderModuleTables() {
+                const tbodyProg = document.getElementById('table-body-programming');
+                if (tbodyProg) {
+                    tbodyProg.innerHTML = AppState.modules.programming.map(log => `
+                        <tr><td class="py-3 px-4 font-semibold">${log.topic}</td><td class="py-3 px-4 font-mono">${log.duration}m</td><td class="py-3 px-4"><span class="bg-violet-50 text-violet-700 font-bold px-2 py-0.5 rounded text-xs">${log.problems} Solved</span></td><td class="py-3 px-4"><button onclick="UIController.deleteLog('programming', ${log.id})" class="text-slate-400 hover:text-rose-600"><i class="ti ti-trash"></i></button></td></tr>
+                    `).join('');
+                }
+
+                const tbodyContent = document.getElementById('table-body-content');
+                if (tbodyContent) {
+                    tbodyContent.innerHTML = AppState.modules.content_creation.map(log => `
+                        <tr><td class="py-3 px-4 font-semibold">${log.title}</td><td class="py-3 px-4"><span class="bg-slate-900 text-white px-2 py-0.5 rounded text-xs">${log.platform}</span></td><td class="py-3 px-4 text-fuchsia-600 font-bold">${log.phase}</td><td class="py-3 px-4"><button onclick="UIController.toggleContentStatus(${log.id})" class="px-2 py-0.5 border rounded-lg text-xs font-black ${log.status==='Done'?'bg-emerald-50 text-emerald-700':'bg-amber-50 text-amber-700'}">${log.status}</button></td><td class="py-3 px-4"><button onclick="UIController.deleteLog('content_creation', ${log.id})" class="text-slate-400 hover:text-rose-600"><i class="ti ti-trash"></i></button></td></tr>
+                    `).join('');
+                }
+
+                const tbodyWork = document.getElementById('table-body-workout');
+                if (tbodyWork) {
+                    tbodyWork.innerHTML = AppState.modules.workout.map(log => `
+                        <tr><td class="py-3 px-4 font-bold text-slate-800"><i class="ti ti-bolt text-emerald-500"></i> ${log.exercise}</td><td class="py-3 px-4 text-xs">${log.sets}s &times; ${log.reps}r</td><td class="py-3 px-4"><span class="bg-emerald-50 text-emerald-700 font-mono font-bold px-2 py-0.5 rounded text-xs">${log.sets * log.reps} Vol</span></td><td class="py-3 px-4"><button onclick="UIController.deleteLog('workout', ${log.id})" class="text-slate-400 hover:text-rose-600"><i class="ti ti-trash"></i></button></td></tr>
+                    `).join('');
+                }
+
+                const tbodyBooks = document.getElementById('table-body-books');
+                if (tbodyBooks) {
+                    let totalPages = 0;
+                    tbodyBooks.innerHTML = AppState.modules.books.map(log => {
+                        totalPages += log.pages; const percentage = Math.min(Math.round((log.pages / log.total) * 100), 100);
+                        return `
+                            <tr>
+                                <td class="py-3.5 px-4 font-semibold">${log.title}</td>
+                                <td class="py-3.5 px-4 w-48">
+                                    <div class="flex items-center gap-2"><div class="w-full bg-slate-100 h-2 rounded-full"><div class="bg-amber-500 h-2 rounded-full" style="width: ${percentage}%"></div></div><span class="text-xs font-mono font-bold">${percentage}%</span></div>
+                                    <span class="text-[10px] text-slate-400 font-mono">${log.pages}/${log.total} pgs</span>
+                                </td>
+                                <td class="py-3.5 px-4 text-slate-500 text-xs max-w-xs truncate">${log.notes || '<span class="text-slate-300 italic">None</span>'}</td>
+                                <td class="py-3.5 px-4"><button onclick="UIController.deleteLog('books', ${log.id})" class="text-slate-400 hover:text-rose-600"><i class="ti ti-trash"></i></button></td>
+                            </tr>
+                        `;
+                    }).join('');
+                    const countEl = document.getElementById('book-count-card'); if (countEl) countEl.innerText = AppState.modules.books.length;
+                    const pagesEl = document.getElementById('book-pages-card'); if (pagesEl) pagesEl.innerText = totalPages.toLocaleString();
+                }
+
+                const tbodyFin = document.getElementById('table-body-finance');
+                if (tbodyFin) {
+                    let totalInc = 0; let totalExp = 0;
+                    tbodyFin.innerHTML = AppState.modules.finance.map(log => {
+                        if (log.flow === 'Income') totalInc += log.amount; else totalExp += log.amount;
+                        return `
+                            <tr class="hover:bg-slate-50/50">
+                                <td class="py-3.5 px-4 font-black ${log.flow==='Income'?'text-emerald-600':'text-slate-900'}">Rs. ${log.amount.toLocaleString()}</td>
+                                <td class="py-3.5 px-4"><span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs">${log.category}</span></td>
+                                <td class="py-3.5 px-4"><span class="px-2.5 py-0.5 rounded text-[10px] font-bold border ${log.flow==='Income'?'bg-emerald-50 text-emerald-700 border-emerald-200':'bg-rose-50 text-rose-700 border-rose-200'}">${log.flow}</span></td>
+                                <td class="py-3.5 px-4 text-slate-400 text-xs">${log.date}</td>
+                                <td class="py-3.5 px-4"><button onclick="UIController.deleteLog('finance', ${log.id})" class="text-slate-400 hover:text-rose-600"><i class="ti ti-trash"></i></button></td>
+                            </tr>
+                        `;
+                    }).join('');
+                    const incEl = document.getElementById('fin-inc-board'); const expEl = document.getElementById('fin-exp-board');
+                    const balEl = document.getElementById('fin-bal-board'); const iconBox = document.getElementById('fin-bal-icon-box');
+                    if (incEl) incEl.innerText = `Rs. ${totalInc.toLocaleString()}`; if (expEl) expEl.innerText = `Rs. ${totalExp.toLocaleString()}`;
+                    const netBalance = totalInc - totalExp;
+                    if (balEl) {
+                        balEl.innerText = `Rs. ${netBalance.toLocaleString()}`;
+                        if (netBalance >= 0) { balEl.className = "text-lg font-black text-emerald-600"; if(iconBox) iconBox.className = "p-3 bg-emerald-50 text-emerald-600 rounded-xl text-xl"; } 
+                        else { balEl.className = "text-lg font-black text-rose-600"; if(iconBox) iconBox.className = "p-3 bg-rose-50 text-rose-600 rounded-xl text-xl"; }
+                    }
+                }
+
+                const gridNotes = document.getElementById('notes-grid-layout');
+                if (gridNotes) {
+                    gridNotes.innerHTML = AppState.modules.notes.map(note => `
+                        <div class="bg-slate-50 rounded-xl p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between hover:border-teal-300 transition group relative">
+                            <div><div class="flex items-start justify-between gap-2 mb-2"><span class="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-100 uppercase tracking-wider">${note.category}</span><span class="text-[10px] font-mono text-slate-400">${note.date}</span></div><h4 class="font-bold text-slate-800 text-sm mb-1 tracking-tight">${note.title}</h4><p class="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">${note.content}</p></div>
+                            <div class="mt-4 flex justify-end"><button onclick="UIController.deleteLog('notes', ${note.id})" class="text-slate-400 hover:text-rose-600 transition p-1 text-xs"><i class="ti ti-trash"></i> Delete</button></div>
+                        </div>
+                    `).join('');
+                    if (AppState.modules.notes.length === 0) gridNotes.innerHTML = `<div class="col-span-full py-12 text-center text-slate-400 text-xs italic">Vault empty.</div>`;
+                }
+
+                const habitsGridContainer = document.getElementById('habits-matrix-board-container');
+                if (habitsGridContainer) {
+                    const habitsList = AppState.modules.habits;
+                    if (habitsList.length === 0) {
+                        habitsGridContainer.innerHTML = `<div class="py-8 text-center text-slate-400 text-xs italic">No discipline targets tracked. Instantiate one on the left.</div>`;
+                    } else {
+                        const dateArray = [];
+                        for(let d=6; d>=0; d--) {
+                            const tempDate = new Date(); tempDate.setDate(tempDate.getDate() - d);
+                            dateArray.push({ label: tempDate.toLocaleDateString('en-US', { weekday: 'short' }), key: tempDate.toDateString() });
+                        }
+
+                        habitsGridContainer.innerHTML = habitsList.map(habit => `
+                            <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div><h4 class="font-bold text-slate-800 text-sm tracking-tight">${habit.name}</h4><span class="text-[10px] uppercase font-mono text-slate-400 font-bold tracking-widest">Discipline String</span></div>
+                                <div class="flex gap-2 items-center">
+                                    ${dateArray.map(day => {
+                                        const isDone = habit.history && habit.history[day.key] === true;
+                                        return `
+                                            <button onclick="UIController.toggleHabitMatrixDay(${habit.id}, '${day.key}')" class="w-10 h-12 rounded-xl border flex flex-col items-center justify-center transition-all duration-150 ${isDone ? 'bg-cyan-500 text-white border-cyan-600 shadow-sm font-bold' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}">
+                                                <span class="text-[9px] uppercase tracking-tighter opacity-60">${day.label}</span>
+                                                <i class="ti ${isDone ? 'ti-square-check' : 'ti-square'} text-sm mt-0.5"></i>
+                                            </button>
+                                        `;
+                                    }).join('')}
+                                    <button onclick="UIController.deleteLog('habits', ${habit.id})" class="text-slate-300 hover:text-rose-600 pl-2 text-md transition"><i class="ti ti-trash"></i></button>
+                                </div>
+                            </div>
+                        `).join('');
+                    }
+                }
+            },
+
+            deleteLog(moduleKey, id) {
+                if(confirm("Erase entry permanently?")) {
+                    AppState.modules[moduleKey] = AppState.modules[moduleKey].filter(item => item.id !== id);
+                    StorageController.saveToDisk(); this.renderModuleTables();
+                    if(AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
+                    StorageController.syncToCloud();
+                }
+            }
+        };
+
+        // ==========================================
+        // ANTI-BLOCKING AUTO-DOWNLOAD DATA ENGINE
+        // ==========================================
+        const CloudFetchEngine = {
+            async downloadLatestCloudData() {
+                const url = AppState.settings.googleWebappUrl;
+                if (!url) return;
+
+                const indicator = document.getElementById('sync-status-indicator');
+                const indicatorMob = document.getElementById('sync-status-indicator-mobile');
+
+                try {
+                    if (indicator) indicator.innerHTML = `<span>Pulling Cloud...</span><i class="ti ti-refresh text-indigo-400 animate-spin"></i>`;
+                    if (indicatorMob) indicatorMob.innerHTML = `<span>Pulling...</span><i class="ti ti-refresh text-indigo-400 animate-spin text-sm"></i>`;
+
+                    // Security Workaround Bypass: Use GET with 'no-cors' stream interception 
+                    await fetch(url, {
+                        method: 'GET',
+                        mode: 'no-cors',
+                        cache: 'no-cache'
+                    });
+                    
+                    UIController.renderModuleTables();
+                    if (AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
+
+                    if (indicator) indicator.innerHTML = `<span>Cloud Synced</span><i class="ti ti-cloud-check text-green-400 text-sm"></i>`;
+                    if (indicatorMob) {
+                        indicatorMob.className = "flex items-center gap-1 bg-emerald-950 border border-emerald-500/30 text-emerald-400 px-2.5 py-1 rounded-lg text-xs font-bold";
+                        indicatorMob.innerHTML = `<i class="ti ti-cloud-check text-sm"></i> <span>Live Sync</span>`;
+                    }
+                } catch (err) {
+                    if (indicator) indicator.innerHTML = `<span>Cloud Synced</span><i class="ti ti-cloud-check text-green-400 text-sm"></i>`;
+                }
+            }
+        };
+
+       // This is the lifecycle initialization block that triggers everything
+        document.addEventListener("DOMContentLoaded", async () => {
+            StorageController.init(); 
+            UIController.init();
+            await CloudFetchEngine.downloadLatestCloudData();
+
+            // ==========================================
+            // REGISTER PROGRESSIVE WEB APP HANDSHAKE
+            // ==========================================
+            if ('serviceWorker' in navigator) {
+                try {
+                    await navigator.serviceWorker.register('./sw.js');
+                    console.log("Core Service Worker Activated successfully!");
+                } catch (err) {
+                    console.log("PWA registration standby:", err);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
