@@ -137,7 +137,7 @@
 
             async syncToCloud() {
                 const url = AppState.settings.googleWebappUrl;
-                if (!url || !navigator.onLine) return; // Prevent cloud posting attempts if offline
+                if (!url || !navigator.onLine) return; 
                 const indicator = document.getElementById('sync-status-indicator');
                 const indicatorMob = document.getElementById('sync-status-indicator-mobile');
                 
@@ -154,10 +154,10 @@
                         }
                     });
 
+                    // FIXED: Dropped 'no-cors' to allow clean handshake verification
                     await fetch(url, {
                         method: 'POST',
-                        mode: 'no-cors', 
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({ entries: dataPackage })
                     });
 
@@ -167,7 +167,7 @@
                         indicatorMob.innerHTML = `<i class="ti ti-cloud-check text-sm"></i> <span>Live Sync</span>`;
                     }
                 } catch (err) {
-                    if (indicator) indicator.innerHTML = `<span>Cloud Synced</span><i class="ti ti-cloud-check text-green-400 text-sm"></i>`;
+                    console.log("Cloud push exception, holding data in local device buffer.");
                 }
             }
         };
@@ -865,7 +865,7 @@
         const CloudFetchEngine = {
             async downloadLatestCloudData() {
                 const url = AppState.settings.googleWebappUrl;
-                if (!url || !navigator.onLine) return; // Instantly skip pulling if network is down
+                if (!url || !navigator.onLine) return; 
 
                 const indicator = document.getElementById('sync-status-indicator');
                 const indicatorMob = document.getElementById('sync-status-indicator-mobile');
@@ -874,7 +874,29 @@
                     if (indicator) indicator.innerHTML = `<span>Pulling Cloud...</span><i class="ti ti-refresh text-indigo-400 animate-spin"></i>`;
                     if (indicatorMob) indicatorMob.innerHTML = `<span>Pulling...</span><i class="ti ti-refresh text-indigo-400 animate-spin text-sm"></i>`;
 
-                    await fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-cache' });
+                    // FIXED: Read standard raw fetch instead of blind no-cors routing
+                    const response = await fetch(url);
+                    const cloudData = await response.json();
+                    
+                    if (cloudData && cloudData.entries) {
+                        // Rebuild your local device storage map with the incoming sheet records
+                        cloudData.entries.forEach(entry => {
+                            const targetModule = AppState.modules[entry.module];
+                            if (Array.isArray(targetModule)) {
+                                const itemExists = targetModule.some(localItem => localItem.id === entry.payload.id);
+                                if (!itemExists) {
+                                    targetModule.push(entry.payload);
+                                }
+                            }
+                        });
+                        // Sort logs to keep the newest entries at the top of the timeline
+                        Object.keys(AppState.modules).forEach(key => {
+                            if (Array.isArray(AppState.modules[key])) {
+                                AppState.modules[key].sort((a, b) => b.id - a.id);
+                            }
+                        });
+                        StorageController.saveToDisk();
+                    }
                     
                     UIController.renderModuleTables();
                     if (AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
@@ -885,7 +907,7 @@
                         indicatorMob.innerHTML = `<i class="ti ti-cloud-check text-sm"></i> <span>Live Sync</span>`;
                     }
                 } catch (err) {
-                    console.log("Cloud sync paused temporarily.");
+                    console.log("Cloud parsing standby: Network route cleared but spreadsheet records empty yet.");
                 }
             }
         };
