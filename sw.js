@@ -1,14 +1,13 @@
-const CACHE_NAME = 'core-system-cache-v1';
+const CACHE_NAME = 'core-system-cache-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './manifest.json',
-  'https://cdn.tailwindcss.com',
-  'https://cdn.jsdelivr.net/npm/chart.js',
-  'https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css'
+  './assets/chart.js',
+  './assets/icons.css',
+  'https://cdn.tailwindcss.com'
 ];
 
-// Install Event - Caching App Shell static assets safely
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -17,7 +16,6 @@ self.addEventListener('install', (e) => {
   );
 });
 
-// Activate Event - Clearing out historical old engine caches 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
@@ -30,23 +28,29 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Fetch Event - Dynamic Network-First fallback to Offline Local Cache Strategy
+// Cache-First, Fallback-to-Network Strategy
 self.addEventListener('fetch', (e) => {
-  // Pass Google Sheet API synchronization routing straight through without intercepting cache
   if (e.request.url.includes('script.google.com')) {
     return fetch(e.request);
   }
 
   e.respondWith(
-    fetch(e.request)
-      .then((response) => {
-        // Clone valid response to update local storage storage layout seamlessly
-        const resClone = response.clone();
+    caches.match(e.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse; 
+      }
+      return fetch(e.request).then((networkResponse) => {
+        if (!networkResponse || networkResponse.status !== 200) {
+          return networkResponse;
+        }
+        const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
-          cache.put(e.request, resClone);
+          cache.put(e.request, responseToCache);
         });
-        return response;
-      })
-      .catch(() => caches.match(e.request))
+        return networkResponse;
+      }).catch(() => {
+        return new Response('', { status: 408, statusText: 'Network checkout failed' });
+      });
+    })
   );
 });

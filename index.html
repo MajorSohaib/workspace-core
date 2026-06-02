@@ -5,9 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sohaib // Core</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
-    
+    <script src="./assets/chart.js"></script>
+    <link rel="stylesheet" href="./assets/icons.css">    
     <style>
         body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -41,11 +40,11 @@
         <nav class="flex-1 space-y-1" id="desktop-nav-links"></nav>
 
         <div class="mt-4 pt-4 border-t border-slate-800 px-2">
-    <a href="https://sheets.google.com" target="_blank" class="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 rounded-xl transition uppercase tracking-wider shadow-sm">
-        <i class="ti ti-spreadsheet text-emerald-500 text-sm"></i>
-        Open Master Sheet
-    </a>
-</div>
+            <a href="https://sheets.google.com" target="_blank" class="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 rounded-xl transition uppercase tracking-wider shadow-sm">
+                <i class="ti ti-spreadsheet text-emerald-500 text-sm"></i>
+                Open Master Sheet
+            </a>
+        </div>
 
         <div id="sync-status-indicator" class="pt-4 border-t border-slate-800 text-xs text-slate-400 px-2 flex items-center justify-between">
             <span>Sync status: Local Only</span>
@@ -64,7 +63,7 @@
         </div>
     </header>
 
-    <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-950 border-t border-slate-800 flex justify-around items-center py-2 px-1 z-50 overflow-x-auto shadow-2xl" id="mobile-nav-links"></nav>
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-950 border-t border-slate-800 justify-around items-center py-2 px-1 z-50 overflow-x-auto shadow-2xl flex" id="mobile-nav-links"></nav>
 
     <main class="flex-1 p-4 md:p-8 pb-24 md:pb-8 overflow-y-auto">
         <div id="doomscroll-alert-modal" class="hidden fixed inset-0 bg-rose-950/95 z-50 flex flex-col items-center justify-center p-6 text-center animate-fade-in select-none">
@@ -138,7 +137,7 @@
 
             async syncToCloud() {
                 const url = AppState.settings.googleWebappUrl;
-                if (!url) return;
+                if (!url || !navigator.onLine) return; // Prevent cloud posting attempts if offline
                 const indicator = document.getElementById('sync-status-indicator');
                 const indicatorMob = document.getElementById('sync-status-indicator-mobile');
                 
@@ -863,13 +862,10 @@
             }
         };
 
-        // ==========================================
-        // ANTI-BLOCKING AUTO-DOWNLOAD DATA ENGINE
-        // ==========================================
         const CloudFetchEngine = {
             async downloadLatestCloudData() {
                 const url = AppState.settings.googleWebappUrl;
-                if (!url) return;
+                if (!url || !navigator.onLine) return; // Instantly skip pulling if network is down
 
                 const indicator = document.getElementById('sync-status-indicator');
                 const indicatorMob = document.getElementById('sync-status-indicator-mobile');
@@ -878,12 +874,7 @@
                     if (indicator) indicator.innerHTML = `<span>Pulling Cloud...</span><i class="ti ti-refresh text-indigo-400 animate-spin"></i>`;
                     if (indicatorMob) indicatorMob.innerHTML = `<span>Pulling...</span><i class="ti ti-refresh text-indigo-400 animate-spin text-sm"></i>`;
 
-                    // Security Workaround Bypass: Use GET with 'no-cors' stream interception 
-                    await fetch(url, {
-                        method: 'GET',
-                        mode: 'no-cors',
-                        cache: 'no-cache'
-                    });
+                    await fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-cache' });
                     
                     UIController.renderModuleTables();
                     if (AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
@@ -894,24 +885,32 @@
                         indicatorMob.innerHTML = `<i class="ti ti-cloud-check text-sm"></i> <span>Live Sync</span>`;
                     }
                 } catch (err) {
-                    if (indicator) indicator.innerHTML = `<span>Cloud Synced</span><i class="ti ti-cloud-check text-green-400 text-sm"></i>`;
+                    console.log("Cloud sync paused temporarily.");
                 }
             }
         };
 
-       // This is the lifecycle initialization block that triggers everything
+        // MODIFIED: Robust standalone initialization sequence with crash safeguards
         document.addEventListener("DOMContentLoaded", async () => {
             StorageController.init(); 
             UIController.init();
-            await CloudFetchEngine.downloadLatestCloudData();
+            
+            // Safe bracket: Keeps layout operational offline by skipping blocking network hooks
+            try {
+                if (navigator.onLine) {
+                    await CloudFetchEngine.downloadLatestCloudData();
+                } else {
+                    console.log("Offline mode active. Running native device buffer shell cleanly.");
+                }
+            } catch (networkError) {
+                console.log("Cloud sync standby - maintaining sandbox view state:", networkError);
+            }
 
-            // ==========================================
             // REGISTER PROGRESSIVE WEB APP HANDSHAKE
-            // ==========================================
             if ('serviceWorker' in navigator) {
                 try {
                     await navigator.serviceWorker.register('./sw.js');
-                    console.log("Core Service Worker Activated successfully!");
+                    console.log("Core Offline Engine Online!");
                 } catch (err) {
                     console.log("PWA registration standby:", err);
                 }
