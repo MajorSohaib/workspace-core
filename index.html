@@ -154,25 +154,28 @@
                         }
                     });
 
-                    // Fire-and-Forget Network Execution Strategy
-                    fetch(url, {
+                    // Authentic standard CORS network request format
+                    const response = await fetch(url, {
                         method: 'POST',
-                        mode: 'no-cors', 
-                        headers: { 'Content-Type': 'application/json' },
+                        mode: 'cors', // Authentic transparent handshake configuration
+                        headers: { 'Content-Type': 'text/plain' }, // Avoids triggering restrictive preflight checks on macro environments
                         body: JSON.stringify({ entries: dataPackage })
                     });
 
-                    // Instantly resolve UI indicator state without blocking for redirect handshakes
-                    setTimeout(() => {
+                    const responseData = await response.json();
+                    console.log("Cloud server confirmation response:", responseData);
+
+                    // If the pipeline returns success confirmation, clear screen immediately!
+                    if (responseData.status === "success" || response.ok) {
                         if (indicator) indicator.innerHTML = `<span>Cloud Synced</span><i class="ti ti-cloud-check text-green-400 text-sm"></i>`;
                         if (indicatorMob) {
                             indicatorMob.className = "flex items-center gap-1 bg-emerald-950 border border-emerald-500/30 text-emerald-400 px-2.5 py-1 rounded-lg text-xs font-bold";
                             indicatorMob.innerHTML = `<i class="ti ti-cloud-check text-sm"></i> <span>Live Sync</span>`;
                         }
-                    }, 800);
-
+                    }
                 } catch (err) {
-                    if (indicator) indicator.innerHTML = `<span>Cloud Synced</span><i class="ti ti-cloud-check text-green-400 text-sm"></i>`;
+                    console.error("Cloud synchronization engine delay intercept:", err);
+                    if (indicator) indicator.innerHTML = `<span>Sync Delayed</span><i class="ti ti-cloud-off text-amber-500 text-sm"></i>`;
                 }
             }
         };
