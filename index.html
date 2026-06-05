@@ -973,6 +973,14 @@
                     console.log("PWA registration standby:", err);
                 }
             }
+            // AUTOMATIC BACKGROUND DATA SYNC WORKER
+        // Runs automatically every 20 seconds to keep multi-device data synchronized
+        setInterval(() => {
+            if (navigator.onLine && typeof CloudFetchEngine !== 'undefined') {
+                console.log("Background Auto-Sync Worker triggered cleanly...");
+                CloudFetchEngine.downloadLatestCloudData();
+            }
+        }, 15000); // 15 Seconds interval check
         });
     </script>
 </body>
