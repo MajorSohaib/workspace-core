@@ -870,10 +870,11 @@
             }
         };
 
+        // Two-Way Sync Component: Pulls backend database and updates layout state concurrenty
         const CloudFetchEngine = {
             async downloadLatestCloudData() {
                 const url = AppState.settings.googleWebappUrl;
-                if (!url || !navigator.onLine) return; 
+                if (!url || !navigator.onLine) return;
 
                 const indicator = document.getElementById('sync-status-indicator');
                 const indicatorMob = document.getElementById('sync-status-indicator-mobile');
@@ -882,40 +883,50 @@
                     if (indicator) indicator.innerHTML = `<span>Pulling Cloud...</span><i class="ti ti-refresh text-indigo-400 animate-spin"></i>`;
                     if (indicatorMob) indicatorMob.innerHTML = `<span>Pulling...</span><i class="ti ti-refresh text-indigo-400 animate-spin text-sm"></i>`;
 
-                    // FIXED: Read standard raw fetch instead of blind no-cors routing
-                    const response = await fetch(url);
-                    const cloudData = await response.json();
+                    // GET request to fetch everything from Google Sheet
+                    const response = await fetch(url, { method: 'GET', cache: 'no-cache' });
+                    const result = await response.json();
                     
-                    if (cloudData && cloudData.entries) {
-                        // Rebuild your local device storage map with the incoming sheet records
-                        cloudData.entries.forEach(entry => {
-                            const targetModule = AppState.modules[entry.module];
-                            if (Array.isArray(targetModule)) {
-                                const itemExists = targetModule.some(localItem => localItem.id === entry.payload.id);
-                                if (!itemExists) {
-                                    targetModule.push(entry.payload);
+                    if (result.status === "success" && result.data) {
+                        // Reset current memory metrics rows cleanly
+                        Object.keys(AppState.modules).forEach(key => {
+                            if (Array.isArray(AppState.modules[key])) AppState.modules[key] = [];
+                        });
+
+                        // Re-populate device database state with cloud entries matrix
+                        result.data.forEach(item => {
+                            const modKey = item.module;
+                            if (AppState.modules[modKey] && Array.isArray(AppState.modules[modKey])) {
+                                // Match the nested entry structure
+                                const extractedPayload = item.payload.payload ? item.payload.payload : item.payload;
+                                // Avoid duplicate entry injections
+                                if (!AppState.modules[modKey].some(existing => existing.id === extractedPayload.id)) {
+                                    AppState.modules[modKey].push(extractedPayload);
                                 }
                             }
                         });
-                        // Sort logs to keep the newest entries at the top of the timeline
+
+                        // Sort arrays so newest items appear at the top
                         Object.keys(AppState.modules).forEach(key => {
                             if (Array.isArray(AppState.modules[key])) {
-                                AppState.modules[key].sort((a, b) => b.id - a.id);
+                                AppState.modules[key].sort((a, b) => (b.id || 0) - (a.id || 0));
                             }
                         });
-                        StorageController.saveToDisk();
-                    }
-                    
-                    UIController.renderModuleTables();
-                    if (AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
 
-                    if (indicator) indicator.innerHTML = `<span>Cloud Synced</span><i class="ti ti-cloud-check text-green-400 text-sm"></i>`;
-                    if (indicatorMob) {
-                        indicatorMob.className = "flex items-center gap-1 bg-emerald-950 border border-emerald-500/30 text-emerald-400 px-2.5 py-1 rounded-lg text-xs font-bold";
-                        indicatorMob.innerHTML = `<i class="ti ti-cloud-check text-sm"></i> <span>Live Sync</span>`;
+                        // Save updated package locally to device storage disk and redraw tables
+                        StorageController.saveToDisk();
+                        UIController.renderModuleTables();
+                        if (AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
+
+                        if (indicator) indicator.innerHTML = `<span>Cloud Synced</span><i class="ti ti-cloud-check text-green-400 text-sm"></i>`;
+                        if (indicatorMob) {
+                            indicatorMob.className = "flex items-center gap-1 bg-emerald-950 border border-emerald-500/30 text-emerald-400 px-2.5 py-1 rounded-lg text-xs font-bold";
+                            indicatorMob.innerHTML = `<i class="ti ti-cloud-check text-sm"></i> <span>Live Sync</span>`;
+                        }
                     }
                 } catch (err) {
-                    console.log("Cloud parsing standby: Network route cleared but spreadsheet records empty yet.");
+                    console.error("Cloud pull engine standby:", err);
+                    if (indicator) indicator.innerHTML = `<span>Sync Delayed</span><i class="ti ti-cloud-off text-amber-500 text-sm"></i>`;
                 }
             }
         };
