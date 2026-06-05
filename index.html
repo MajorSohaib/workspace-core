@@ -871,6 +871,7 @@
         };
 
         // Two-Way Sync Component: Pulls backend database and updates layout state concurrenty
+        // Fully Adaptive Multi-Device Synchronizer Core Engine
         const CloudFetchEngine = {
             async downloadLatestCloudData() {
                 const url = AppState.settings.googleWebappUrl;
@@ -883,37 +884,53 @@
                     if (indicator) indicator.innerHTML = `<span>Pulling Cloud...</span><i class="ti ti-refresh text-indigo-400 animate-spin"></i>`;
                     if (indicatorMob) indicatorMob.innerHTML = `<span>Pulling...</span><i class="ti ti-refresh text-indigo-400 animate-spin text-sm"></i>`;
 
-                    // GET request to fetch everything from Google Sheet
                     const response = await fetch(url, { method: 'GET', cache: 'no-cache' });
                     const result = await response.json();
                     
                     if (result.status === "success" && result.data) {
-                        // Reset current memory metrics rows cleanly
+                        // Reset dynamic local states matrix safely
                         Object.keys(AppState.modules).forEach(key => {
                             if (Array.isArray(AppState.modules[key])) AppState.modules[key] = [];
                         });
 
-                        // Re-populate device database state with cloud entries matrix
+                        // Deep structural data recovery loops
                         result.data.forEach(item => {
                             const modKey = item.module;
+                            
                             if (AppState.modules[modKey] && Array.isArray(AppState.modules[modKey])) {
-                                // Match the nested entry structure
-                                const extractedPayload = item.payload.payload ? item.payload.payload : item.payload;
-                                // Avoid duplicate entry injections
-                                if (!AppState.modules[modKey].some(existing => existing.id === extractedPayload.id)) {
-                                    AppState.modules[modKey].push(extractedPayload);
+                                let extractedPayload = null;
+                                
+                                // Direct checking for dual structural nesting arrays or raw sheets maps
+                                if (item.payload && item.payload.payload) {
+                                    extractedPayload = item.payload.payload;
+                                } else if (item.payload) {
+                                    extractedPayload = item.payload;
+                                } else {
+                                    extractedPayload = item;
+                                }
+
+                                // Structural fallback: Ensure object matches database tracking indexes correctly
+                                if (extractedPayload && typeof extractedPayload === 'object') {
+                                    if (!extractedPayload.id) {
+                                        extractedPayload.id = item.timestamp || Date.now();
+                                    }
+                                    
+                                    // Inject item logs cleanly if no duplicates exist
+                                    if (!AppState.modules[modKey].some(existing => existing.id === extractedPayload.id)) {
+                                        AppState.modules[modKey].push(extractedPayload);
+                                    }
                                 }
                             }
                         });
 
-                        // Sort arrays so newest items appear at the top
+                        // Rearrange timeline elements sequentially
                         Object.keys(AppState.modules).forEach(key => {
                             if (Array.isArray(AppState.modules[key])) {
                                 AppState.modules[key].sort((a, b) => (b.id || 0) - (a.id || 0));
                             }
                         });
 
-                        // Save updated package locally to device storage disk and redraw tables
+                        // Force immediate memory updates to disk and interface viewports concurrently
                         StorageController.saveToDisk();
                         UIController.renderModuleTables();
                         if (AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
@@ -925,7 +942,7 @@
                         }
                     }
                 } catch (err) {
-                    console.error("Cloud pull engine standby:", err);
+                    console.error("Cloud tracking database extraction exception intercept:", err);
                     if (indicator) indicator.innerHTML = `<span>Sync Delayed</span><i class="ti ti-cloud-off text-amber-500 text-sm"></i>`;
                 }
             }
