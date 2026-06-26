@@ -969,19 +969,17 @@
         };
 
         // Standalone initialization sequence with crash safeguards
+        // Standalone initialization sequence with absolute tap clearances
         document.addEventListener("DOMContentLoaded", async () => {
+            // Force interface handlers to register instantly first
             StorageController.init(); 
             UIController.init();
             
-            // Safe bracket: Keeps layout operational offline by skipping blocking network hooks
-            try {
-                if (navigator.onLine) {
-                    await CloudFetchEngine.downloadLatestCloudData();
-                } else {
-                    console.log("Offline mode active. Running native device buffer shell cleanly.");
-                }
-            } catch (networkError) {
-                console.log("Cloud sync standby - maintaining sandbox view state:", networkError);
+            // Safe bracket: Non-blocking data pool fetch layout
+            if (navigator.onLine) {
+                CloudFetchEngine.downloadLatestCloudData().catch(err => {
+                    console.log("Initial pull bypassed safely:", err);
+                });
             }
 
             // REGISTER PROGRESSIVE WEB APP HANDSHAKE
@@ -993,12 +991,12 @@
                     console.log("PWA registration standby:", err);
                 }
             }
+
             // AUTOMATIC BACKGROUND DATA SYNC WORKER
-            // Runs automatically every 20 seconds to keep multi-device data synchronized
             setInterval(() => {
                 if (navigator.onLine && typeof CloudFetchEngine !== 'undefined') {
                     console.log("Background Auto-Sync Worker triggered cleanly...");
-                    CloudFetchEngine.downloadLatestCloudData();
+                    CloudFetchEngine.downloadLatestCloudData().catch(e => console.log("Sync skipped"));
                 }
             }, 15000); // 15 Seconds interval check
         });
