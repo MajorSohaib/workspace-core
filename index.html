@@ -154,18 +154,14 @@
                         }
                     });
 
-                    // Authentic standard CORS network request format
                     const response = await fetch(url, {
                         method: 'POST',
-                        mode: 'cors', // Authentic transparent handshake configuration
-                        headers: { 'Content-Type': 'text/plain' }, // Avoids triggering restrictive preflight checks on macro environments
+                        mode: 'cors',
+                        headers: { 'Content-Type': 'text/plain' },
                         body: JSON.stringify({ entries: dataPackage })
                     });
 
                     const responseData = await response.json();
-                    console.log("Cloud server confirmation response:", responseData);
-
-                    // If the pipeline returns success confirmation, clear screen immediately!
                     if (responseData.status === "success" || response.ok) {
                         if (indicator) indicator.innerHTML = `<span>Cloud Synced</span><i class="ti ti-cloud-check text-green-400 text-sm"></i>`;
                         if (indicatorMob) {
@@ -862,19 +858,19 @@
 
             deleteLog(moduleKey, id) {
                 if(confirm("Erase entry permanently?")) {
-                    // 1. Immediate UI Flush (Screen se foran gayab)
+                    // 1. Immediate local Pessimistic Flush (Screen clear first)
                     AppState.modules[moduleKey] = AppState.modules[moduleKey].filter(item => item.id !== id);
                     StorageController.saveToDisk(); 
                     this.renderModuleTables();
                     if(AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
                     
-                    // 2. Clear targeting request trigger to Google Sheet backend
+                    // 2. Dispatch fetch purge payload to backend Google Sheet Web App
                     const url = AppState.settings.googleWebappUrl;
                     if (!url || !navigator.onLine) return;
 
                     fetch(url, {
                         method: 'POST',
-                        mode: 'no-cors', // WebView CORS handling override
+                        mode: 'no-cors',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             action: 'DELETE',
@@ -882,16 +878,14 @@
                             id: id
                         })
                     }).then(() => {
-                        console.log("Cloud server purge sync cleared cleanly.");
+                        console.log("Cloud execution trace removed successfully.");
                     }).catch(err => {
-                        console.error("Cloud tracking delete bypass failed:", err);
+                        console.error("Cloud delete tracking dropped:", err);
                     });
                 }
             }
         };
 
-        // Two-Way Sync Component: Pulls backend database and updates layout state concurrenty
-        // Fully Adaptive Multi-Device Synchronizer Core Engine
         const CloudFetchEngine = {
             async downloadLatestCloudData() {
                 const url = AppState.settings.googleWebappUrl;
@@ -908,19 +902,14 @@
                     const result = await response.json();
                     
                     if (result.status === "success" && result.data) {
-                        // Reset dynamic local states matrix safely
                         Object.keys(AppState.modules).forEach(key => {
                             if (Array.isArray(AppState.modules[key])) AppState.modules[key] = [];
                         });
 
-                        // Deep structural data recovery loops
                         result.data.forEach(item => {
                             const modKey = item.module;
-                            
                             if (AppState.modules[modKey] && Array.isArray(AppState.modules[modKey])) {
                                 let extractedPayload = null;
-                                
-                                // Direct checking for dual structural nesting arrays or raw sheets maps
                                 if (item.payload && item.payload.payload) {
                                     extractedPayload = item.payload.payload;
                                 } else if (item.payload) {
@@ -929,13 +918,10 @@
                                     extractedPayload = item;
                                 }
 
-                                // Structural fallback: Ensure object matches database tracking indexes correctly
                                 if (extractedPayload && typeof extractedPayload === 'object') {
                                     if (!extractedPayload.id) {
                                         extractedPayload.id = item.timestamp || Date.now();
                                     }
-                                    
-                                    // Inject item logs cleanly if no duplicates exist
                                     if (!AppState.modules[modKey].some(existing => existing.id === extractedPayload.id)) {
                                         AppState.modules[modKey].push(extractedPayload);
                                     }
@@ -943,14 +929,12 @@
                             }
                         });
 
-                        // Rearrange timeline elements sequentially
                         Object.keys(AppState.modules).forEach(key => {
                             if (Array.isArray(AppState.modules[key])) {
                                 AppState.modules[key].sort((a, b) => (b.id || 0) - (a.id || 0));
                             }
                         });
 
-                        // Force immediate memory updates to disk and interface viewports concurrently
                         StorageController.saveToDisk();
                         UIController.renderModuleTables();
                         if (AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
@@ -962,27 +946,24 @@
                         }
                     }
                 } catch (err) {
-                    console.error("Cloud tracking database extraction exception intercept:", err);
+                    console.error("Cloud database fetch exception caught:", err);
                     if (indicator) indicator.innerHTML = `<span>Sync Delayed</span><i class="ti ti-cloud-off text-amber-500 text-sm"></i>`;
                 }
             }
         };
 
-        // Standalone initialization sequence with crash safeguards
-        // Standalone initialization sequence with absolute tap clearances
         document.addEventListener("DOMContentLoaded", async () => {
-            // Force interface handlers to register instantly first
             StorageController.init(); 
             UIController.init();
             
-            // Safe bracket: Non-blocking data pool fetch layout
-            if (navigator.onLine) {
-                CloudFetchEngine.downloadLatestCloudData().catch(err => {
-                    console.log("Initial pull bypassed safely:", err);
-                });
+            try {
+                if (navigator.onLine) {
+                    await CloudFetchEngine.downloadLatestCloudData();
+                }
+            } catch (networkError) {
+                console.log("Cloud layout initialization split deferred:", networkError);
             }
 
-            // REGISTER PROGRESSIVE WEB APP HANDSHAKE
             if ('serviceWorker' in navigator) {
                 try {
                     await navigator.serviceWorker.register('./sw.js');
@@ -992,13 +973,11 @@
                 }
             }
 
-            // AUTOMATIC BACKGROUND DATA SYNC WORKER
             setInterval(() => {
                 if (navigator.onLine && typeof CloudFetchEngine !== 'undefined') {
-                    console.log("Background Auto-Sync Worker triggered cleanly...");
-                    CloudFetchEngine.downloadLatestCloudData().catch(e => console.log("Sync skipped"));
+                    CloudFetchEngine.downloadLatestCloudData().catch(e => console.log("Short polling task dropped"));
                 }
-            }, 15000); // 15 Seconds interval check
+            }, 15000);
         });
     </script>
 </body>
