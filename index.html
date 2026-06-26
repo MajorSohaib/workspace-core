@@ -83,11 +83,11 @@
             settings: { googleWebappUrl: '' },
             modules: {
                 dashboard: {},
-                programming: [],       
+                programming: [],        
                 content_creation: [],  
-                books: [],             
-                notes: [],             
-                workout: [],           
+                books: [],              
+                notes: [],              
+                workout: [],            
                 finance: [], 
                 alarms: [],
                 habits: []
@@ -862,10 +862,30 @@
 
             deleteLog(moduleKey, id) {
                 if(confirm("Erase entry permanently?")) {
+                    // 1. Immediate UI Flush (Screen se foran gayab)
                     AppState.modules[moduleKey] = AppState.modules[moduleKey].filter(item => item.id !== id);
-                    StorageController.saveToDisk(); this.renderModuleTables();
+                    StorageController.saveToDisk(); 
+                    this.renderModuleTables();
                     if(AppState.activeView === 'dashboard') GraphEngine.renderDashboardCharts();
-                    StorageController.syncToCloud();
+                    
+                    // 2. Clear targeting request trigger to Google Sheet backend
+                    const url = AppState.settings.googleWebappUrl;
+                    if (!url || !navigator.onLine) return;
+
+                    fetch(url, {
+                        method: 'POST',
+                        mode: 'no-cors', // WebView CORS handling override
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'DELETE',
+                            module: moduleKey,
+                            id: id
+                        })
+                    }).then(() => {
+                        console.log("Cloud server purge sync cleared cleanly.");
+                    }).catch(err => {
+                        console.error("Cloud tracking delete bypass failed:", err);
+                    });
                 }
             }
         };
@@ -948,7 +968,7 @@
             }
         };
 
-        // MODIFIED: Robust standalone initialization sequence with crash safeguards
+        // Standalone initialization sequence with crash safeguards
         document.addEventListener("DOMContentLoaded", async () => {
             StorageController.init(); 
             UIController.init();
@@ -974,13 +994,13 @@
                 }
             }
             // AUTOMATIC BACKGROUND DATA SYNC WORKER
-        // Runs automatically every 20 seconds to keep multi-device data synchronized
-        setInterval(() => {
-            if (navigator.onLine && typeof CloudFetchEngine !== 'undefined') {
-                console.log("Background Auto-Sync Worker triggered cleanly...");
-                CloudFetchEngine.downloadLatestCloudData();
-            }
-        }, 15000); // 15 Seconds interval check
+            // Runs automatically every 20 seconds to keep multi-device data synchronized
+            setInterval(() => {
+                if (navigator.onLine && typeof CloudFetchEngine !== 'undefined') {
+                    console.log("Background Auto-Sync Worker triggered cleanly...");
+                    CloudFetchEngine.downloadLatestCloudData();
+                }
+            }, 15000); // 15 Seconds interval check
         });
     </script>
 </body>
